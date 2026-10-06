@@ -21,11 +21,18 @@ def conectar():
     )
 
 
+def idsSalvos(conn):
+    with conn.cursor() as cursor:
+        cursor.execute('SELECT Produto_id FROM Produto;')
+        return {linha[0] for linha in cursor}
+
+
 def saveInSQLandTxt(conn, Produto, Macronutrientes, Minerais, Vitaminas):
-    with conn.cursor() as cursor, open(ARQUIVO_TXT, 'a', encoding='UTF-8') as f:
-        for query, valores in zip(QUERIES, [Produto, Macronutrientes, Minerais, Vitaminas]):
-            sql = cursor.mogrify(query, valores)
+    with conn.cursor() as cursor:
+        sqls = [cursor.mogrify(q, v).decode('UTF-8') for q, v in zip(QUERIES, [Produto, Macronutrientes, Minerais, Vitaminas])]
+        for sql in sqls:
             cursor.execute(sql)
-            f.write('\n' + sql.decode('UTF-8'))
-        f.write('\n')
     conn.commit()
+    # Só grava no txt depois do commit, para o arquivo não ter produtos pela metade
+    with open(ARQUIVO_TXT, 'a', encoding='UTF-8') as f:
+        f.write('\n' + '\n'.join(sqls) + '\n')
