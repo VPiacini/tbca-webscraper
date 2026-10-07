@@ -4,13 +4,6 @@ import psycopg2
 
 ARQUIVO_TXT = 'queries.txt'
 
-QUERIES = [
-    "INSERT INTO Produto (Produto_id, nome, categoria) VALUES (%s, %s, %s);",
-    "INSERT INTO Macronutrientes (Produto_id, calorias, carboidratos, acucares_totais, acucares_adicionados, proteinas, gorduras_saturadas, gorduras_trans, fibra) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);",
-    "INSERT INTO Minerais (Produto_id, calcio, ferro, magnesio, fosforo, potassio, sodio, zinco, cobre, manganes, selenio) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-    "INSERT INTO Vitaminas (Produto_id, vitaminaA, vitaminaE, vitaminaD, vitaminaC, vitaminaK, tiamina, riboflavina, niacina, vitaminaB6, folato, vitaminaB12) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-]
-
 
 def conectar():
     return psycopg2.connect(
@@ -27,9 +20,13 @@ def idsSalvos(conn):
         return {linha[0] for linha in cursor}
 
 
-def saveInSQLandTxt(conn, Produto, Macronutrientes, Minerais, Vitaminas):
+def saveInSQLandTxt(conn, linhas):
+    """linhas: {tabela: {coluna: valor}}. Nomes de tabela e coluna vêm do código, nunca do site."""
     with conn.cursor() as cursor:
-        sqls = [cursor.mogrify(q, v).decode('UTF-8') for q, v in zip(QUERIES, [Produto, Macronutrientes, Minerais, Vitaminas])]
+        sqls = []
+        for tabela, linha in linhas.items():
+            query = f"INSERT INTO {tabela} ({', '.join(linha)}) VALUES ({', '.join(['%s'] * len(linha))});"
+            sqls.append(cursor.mogrify(query, list(linha.values())).decode('UTF-8'))
         for sql in sqls:
             cursor.execute(sql)
     conn.commit()

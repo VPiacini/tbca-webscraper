@@ -37,16 +37,41 @@ CATEGORIAS = {
     'U': 'Nozes e sementes',
 }
 
-# Fatores para converter cada unidade em gramas (energia fica em kcal)
-PARA_GRAMAS = {'g': 1, 'mg': 1 / 1000, 'mcg': 1 / 1_000_000, 'kcal': 1}
-
-# Nome do componente na TBCA, na ordem das colunas de cada tabela
-MACRONUTRIENTES = ['Energia', 'Carboidrato total', 'Açúcar de adição', 'Açúcar de adição', 'Proteína',
-                   'Ácidos graxos saturados', 'Ácidos graxos trans', 'Fibra alimentar']
-MINERAIS = ['Cálcio', 'Ferro', 'Magnésio', 'Fósforo', 'Potássio', 'Sódio', 'Zinco', 'Cobre', 'Manganês', 'Selênio']
-VITAMINAS = ['Vitamina A (RE)', 'Alfa-tocoferol (Vitamina E)', 'Vitamina D', 'Vitamina C',
-             'Vitamina K',  # não existe na TBCA, fica NULL
-             'Tiamina', 'Riboflavina', 'Niacina', 'Vitamina B6', 'Equivalente de folato', 'Vitamina B12']
+# Coluna no banco -> componente na TBCA. Valores por 100 g, na unidade original da TBCA (ver schema.sql).
+# Componentes que a TBCA não informa ficam NULL.
+TABELAS = {
+    'Macronutrientes': {
+        'calorias': 'Energia',  # kcal (a linha em kJ é ignorada)
+        'carboidratos': 'Carboidrato total',
+        'acucares_totais': 'Açúcar total',  # não existe na TBCA
+        'acucares_adicionados': 'Açúcar de adição',
+        'proteinas': 'Proteína',
+        'gorduras_totais': 'Lipídios',
+        'gorduras_saturadas': 'Ácidos graxos saturados',
+        'gorduras_monoinsaturadas': 'Ácidos graxos monoinsaturados',
+        'gorduras_poliinsaturadas': 'Ácidos graxos poliinsaturados',
+        'gorduras_trans': 'Ácidos graxos trans',
+        'colesterol': 'Colesterol',
+        'fibra': 'Fibra alimentar',
+    },
+    'Minerais': {
+        'calcio': 'Cálcio', 'ferro': 'Ferro', 'magnesio': 'Magnésio', 'fosforo': 'Fósforo', 'potassio': 'Potássio',
+        'sodio': 'Sódio', 'zinco': 'Zinco', 'cobre': 'Cobre', 'manganes': 'Manganês', 'selenio': 'Selênio',
+    },
+    'Vitaminas': {
+        'vitaminaA': 'Vitamina A (RAE)',
+        'vitaminaE': 'Alfa-tocoferol (Vitamina E)',
+        'vitaminaD': 'Vitamina D',
+        'vitaminaC': 'Vitamina C',
+        'vitaminaK': 'Vitamina K',  # não existe na TBCA
+        'tiamina': 'Tiamina',
+        'riboflavina': 'Riboflavina',
+        'niacina': 'Niacina',
+        'vitaminaB6': 'Vitamina B6',
+        'folato': 'Equivalente de folato',
+        'vitaminaB12': 'Vitamina B12',
+    },
+}
 
 
 def baixar(caminho, **params):
@@ -69,15 +94,16 @@ def listarProdutos():
         pagina += 1
 
 
-def paraGramas(unidade, valor):
-    if valor in ('tr', 'NA', '-', ''):
+def lerValor(valor):
+    if valor == 'tr':  # traço: presente em quantidade não quantificável
         return 0
-    if unidade not in PARA_GRAMAS:
-        raise ValueError('Novo tipo de unidade não mensurado para gramas: ' + unidade)
-    return float(valor.replace(',', '.')) * PARA_GRAMAS[unidade]
+    if valor in ('NA', '-', ''):  # não analisado: desconhecido, não zero
+        return None
+    return float(valor.replace(',', '.'))
 
 
 def lerProduto(id, soup):
+    """Devolve {tabela: {coluna: valor}} na ordem de inserção."""
     cabecalho = soup.find('h5').get_text(' ', strip=True)
     letra, grupo = re.search(r'Grupo: (\w) - (.+?) Tipo', cabecalho).groups()
     nome = re.search(r'Descrição: (.+?)(?: <<|$)', cabecalho).group(1)
@@ -86,13 +112,12 @@ def lerProduto(id, soup):
     for row in soup.find('table').find_all('tr'):
         celulas = [cell.get_text(strip=True) for cell in row.find_all('td')]
         if celulas and celulas[2] != 'kJ':  # componente, tagname, unidade, valor por 100 g, ...
-            valores[celulas[0]] = paraGramas(celulas[2], celulas[3])
+            valores[celulas[0]] = lerValor(celulas[3])
 
-    Produto = [id, nome, CATEGORIAS.get(letra, grupo)]
-    Macronutrientes = [id] + [valores.get(c) for c in MACRONUTRIENTES]
-    Minerais = [id] + [valores.get(c) for c in MINERAIS]
-    Vitaminas = [id] + [valores.get(c) for c in VITAMINAS]
-    return Produto, Macronutrientes, Minerais, Vitaminas
+    linhas = {'Produto': {'Produto_id': id, 'nome': nome, 'categoria': CATEGORIAS.get(letra, grupo)}}
+    for tabela, colunas in TABELAS.items():
+        linhas[tabela] = {'Produto_id': id} | {coluna: valores.get(c) for coluna, c in colunas.items()}
+    return linhas
 
 
 def main():
@@ -107,7 +132,7 @@ def main():
             if id in salvos:
                 continue
             try:
-                addToSQL.saveInSQLandTxt(conn, *lerProduto(id, baixar(link)))
+                addToSQL.saveInSQLandTxt(conn, lerProduto(id, baixar(link)))
                 novos += 1
                 log.info('%s salvo', codigo)
             except Exception:

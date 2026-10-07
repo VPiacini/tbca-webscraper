@@ -2,11 +2,13 @@
 
 Web scraper for the [Brazilian Food Composition Table (TBCA)](https://www.tbca.net.br/). It walks through the database's food list, extracts the composition data for each food, and saves it to a PostgreSQL database. It was built as part of an undergraduate thesis (TCC).
 
+At a glance: ~5,900 foods, 4 relational tables, 31 nutrients per food, polite crawling with retries, automatic resume.
+
 ## How it works
 
 1. Goes through the pages of the listing at `composicao_estatistica.php` (100 foods per page) until it reaches an empty page.
 2. Opens each food's page and reads the header (code, group, description) and the component table.
-3. Converts every unit to grams (`mg` and `mcg`). Energy stays in kcal.
+3. Keeps every value in TBCA's original unit (kcal, g, mg or µg per 100 g). Trace amounts (`tr`) become `0`; values TBCA did not analyze (`NA`, `-`) become `NULL`.
 4. Inserts the food into the four tables with `psycopg2` in a single transaction, and appends the same `INSERT` statements to `queries.txt`.
 
 ### Reliability
@@ -22,18 +24,20 @@ Web scraper for the [Brazilian Food Composition Table (TBCA)](https://www.tbca.n
 | Table | Columns |
 |---|---|
 | `Produto` | Produto_id, nome, categoria |
-| `Macronutrientes` | Produto_id, calorias (kcal), carboidratos, acucares_totais, acucares_adicionados, proteinas, gorduras_saturadas, gorduras_trans, fibra |
-| `Minerais` | Produto_id, calcio, ferro, magnesio, fosforo, potassio, sodio, zinco, cobre, manganes, selenio |
-| `Vitaminas` | Produto_id, vitaminaA, vitaminaE, vitaminaD, vitaminaC, vitaminaK, tiamina, riboflavina, niacina, vitaminaB6, folato, vitaminaB12 |
+| `Macronutrientes` | calorias, carboidratos, acucares_totais, acucares_adicionados, proteinas, gorduras_totais, gorduras_saturadas, gorduras_monoinsaturadas, gorduras_poliinsaturadas, gorduras_trans, colesterol, fibra |
+| `Minerais` | calcio, ferro, magnesio, fosforo, potassio, sodio, zinco, cobre, manganes, selenio |
+| `Vitaminas` | vitaminaA, vitaminaE, vitaminaD, vitaminaC, vitaminaK, tiamina, riboflavina, niacina, vitaminaB6, folato, vitaminaB12 |
 
-There is also a fixed `Categoria` table with the possible categories. The tables must exist before running the scraper.
+[`schema.sql`](schema.sql) creates the tables and documents the unit of each column. `Produto_id` is the TBCA code without the `BRC` prefix (e.g. `0001A`) and links the nutrient tables to `Produto`.
 
-`Produto_id` is the TBCA code without the `BRC` prefix (e.g. `0001A`). Nutrients are in grams per 100 g of food. TBCA does not report total sugars or vitamin K, so `acucares_totais` repeats the added sugar value and `vitaminaK` is `NULL`.
+- Vitamin A is stored in µg RAE, the unit used by Brazilian nutrition labeling rules (Anvisa IN 75/2020).
+- TBCA reports neither total sugars nor vitamin K, so `acucares_totais` and `vitaminaK` are always `NULL`.
 
 ## Usage
 
 ```bash
 pip install -r requirements.txt
+psql -d Tabela_Completa -f schema.sql
 ```
 
 The connection is set with environment variables: `DB_PASS` (required), `DB_NAME` (default `Tabela_Completa`), `DB_USER` (default `postgres`) and `DB_HOST` (default `localhost`).
