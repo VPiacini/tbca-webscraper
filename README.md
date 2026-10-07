@@ -13,7 +13,7 @@ At a glance: ~5,900 foods, 4 relational tables, 31 nutrients per food, polite cr
 
 ### Reliability
 
-- The scraper pauses between requests (2 s by default, set with `PAUSA`). The site drops the connection when requests come in quick succession.
+- The scraper pauses between requests (2 s by default, set with `PAUSA`).
 - Connection errors and 429/5xx responses are retried up to 5 times, with increasing waits.
 - If one food fails, the error is logged and its transaction is rolled back. The rest of the run continues.
 - Foods already in the database are skipped, so running the script again resumes an interrupted run.
@@ -29,9 +29,6 @@ At a glance: ~5,900 foods, 4 relational tables, 31 nutrients per food, polite cr
 | `Vitaminas` | vitaminaA, vitaminaE, vitaminaD, vitaminaC, vitaminaK, tiamina, riboflavina, niacina, vitaminaB6, folato, vitaminaB12 |
 
 [`schema.sql`](schema.sql) creates the tables and documents the unit of each column. `Produto_id` is the TBCA code without the `BRC` prefix (e.g. `0001A`) and links the nutrient tables to `Produto`.
-
-- Vitamin A is stored in µg RAE, the unit used by Brazilian nutrition labeling rules (Anvisa IN 75/2020).
-- TBCA reports neither total sugars nor vitamin K, so `acucares_totais` and `vitaminaK` are always `NULL`.
 
 ## Usage
 
